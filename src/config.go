@@ -1,0 +1,268 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/BurntSushi/toml"
+)
+
+const configFile = "smd.toml"
+
+type Config struct {
+	Project   ProjectConfig   `toml:"project"`
+	Container ContainerConfig `toml:"container"`
+	Security  SecurityConfig  `toml:"security"`
+	Live      LiveConfig      `toml:"live"`
+	Temp      TempConfig      `toml:"temp"`
+}
+
+type ProjectConfig struct {
+	Name string   `toml:"name"`
+	Type []string `toml:"type"`
+}
+
+type ContainerConfig struct {
+	Image   string `toml:"image"`
+	Workdir string `toml:"workdir"`
+}
+
+type SecurityConfig struct {
+	AllowEnv   []string `toml:"allow_env"`
+	BlockFiles []string `toml:"block_files"`
+}
+
+type LiveConfig struct {
+	MountPwd bool     `toml:"mount_pwd"`
+	Ports    []string `toml:"ports"`
+}
+
+type TempConfig struct {
+	AllowEnv []string `toml:"allow_env"`
+	MountPwd bool     `toml:"mount_pwd"`
+	ReadOnly bool     `toml:"read_only"`
+}
+
+var supportedEnvironments = map[string]string{
+	"nodejs": "docker.io/node:20-alpine",
+	"python": "docker.io/python:3.12-alpine",
+	"go":     "docker.io/golang:1.22-alpine",
+	"rust":   "docker.io/rust:1.76-alpine",
+}
+
+func LoadConfig() (*Config, error) {
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	var config Config
+	if _, err := toml.DecodeFile(configFile, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", configFile, err)
+	}
+
+	if config.Container.Workdir == "" {
+		config.Container.Workdir = "/app"
+	}
+
+	return &config, nil
+}
+
+func InteractiveInit() (*Config, error) {
+	fmt.Println("No smd.toml found. Let's create one!")
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Println("Available environments:")
+	fmt.Println("  1) nodejs - Node.js applications")
+	fmt.Println("  2) python - Python applications")
+	fmt.Println("  3) go     - Go applications")
+	fmt.Println("  4) rust   - Rust applications")
+	fmt.Println()
+	fmt.Print("Select environment(s) (comma-separated numbers, e.g., 1,3): ")
+
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+
+	selectedTypes := parseSelection(strings.TrimSpace(input))
+	if len(selectedTypes) == 0 {
+		return nil, fmt.Errorf("no environment selected")
+	}
+
+	fmt.Println()
+	fmt.Println("Choose mode:")
+	fmt.Println("  [temp] - Secure/isolated (one-off commands, no file sync)")
+	fmt.Println("  [live] - Persistent/mounted (development with file watching)")
+	fmt.Print("Select mode [temp/live]: ")
+
+	modeInput, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+
+	mode := strings.TrimSpace(strings.ToLower(modeInput))
+	if mode != "live" {
+		mode = "temp"
+	}
+
+	fmt.Println()
+	fmt.Print("Project name [my-project]: ")
+	nameInput, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+
+	projectName := strings.TrimSpace(nameInput)
+	if projectName == "" {
+		projectName = "my-project"
+	}
+
+	config := &Config{
+		Project: ProjectConfig{
+			Name: projectName,
+			Type: selectedTypes,
+		},
+		Container: ContainerConfig{
+			Image:   supportedEnvironments[selectedTypes[0]],
+			Workdir: "/app",
+		},
+		Security: SecurityConfig{
+			AllowEnv:   []string{},
+			BlockFiles: defaultBlockFiles(selectedTypes),
+		},
+		Live: LiveConfig{
+			MountPwd: true,
+			Ports:    defaultPorts(selectedTypes),
+		},
+		Temp: TempConfig{
+			AllowEnv: []string{},
+			MountPwd: true,
+		},
+	}
+
+	if err := SaveConfig(config); err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("\nCreated %s with %s mode preference.\n", configFile, mode)
+	fmt.Println("You can now run 'smd' for live mode or 'smd <command>' for temp mode.")
+
+	return config, nil
+}
+
+func parseSelection(input string) []string {
+	var result []string
+	parts := strings.Split(input, ",")
+
+	for _, part := range parts {
+		n := strings.TrimSpace(part)
+		switch n {
+		case "1":
+			result = append(result, "nodejs")
+		case "2":
+			result = append(result, "python")
+		case "3":
+			result = append(result, "go")
+		case "4":
+			result = append(result, "rust")
+		}
+	}
+
+	return result
+}
+
+func defaultBlockFiles(types []string) []string {
+	blocks := []string{}
+	for _, t := range types {
+		switch t {
+		case "nodejs":
+			blocks = append(blocks, ".npmrc", ".yarnrc", ".pnpmfile.cjs")
+		case "python":
+			blocks = append(blocks, ".pypirc", "pip.conf")
+		case "go":
+			blocks = append(blocks, ".netrc")
+		case "rust":
+			blocks = append(blocks, ".cargo/credentials")
+		}
+	}
+	return blocks
+}
+
+func defaultPorts(types []string) []string {
+	ports := []string{}
+	for _, t := range types {
+		switch t {
+		case "nodejs":
+			ports = append(ports, "3000:3000", "8080:8080")
+		case "python":
+			ports = append(ports, "5000:5000", "8000:8000")
+		case "go":
+			ports = append(ports, "8080:8080")
+		case "rust":
+			ports = append(ports, "8080:8080")
+		}
+	}
+	return ports
+}
+
+func SaveConfig(config *Config) error {
+	f, err := os.Create(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to create %s: %w", configFile, err)
+	}
+	defer f.Close()
+
+	return toml.NewEncoder(f).Encode(config)
+}
+
+func FindEnvFiles() ([]string, error) {
+	var envFiles []string
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, ".env") {
+			envFiles = append(envFiles, name)
+		}
+	}
+
+	return envFiles, nil
+}
+
+func IsEnvFileBlocked(filename string, config *Config, isTempMode bool) bool {
+	if !isTempMode {
+		return false
+	}
+
+	if !strings.HasPrefix(filename, ".env") {
+		return false
+	}
+
+	for _, allowed := range config.Security.AllowEnv {
+		if allowed == filename {
+			return false
+		}
+	}
+
+	return true
+}
+
+func GetProjectName() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "smd-project"
+	}
+	return filepath.Base(cwd)
+}

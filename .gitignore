@@ -1,0 +1,37 @@
+# Binaries
+smd
+smd-*
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go build artifacts
+dist/
+build/
+
+# Nix
+result
+result-*
+.direnv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific (user configs)
+smd.toml
+!.smd.toml.example

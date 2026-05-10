@@ -24,6 +24,10 @@
             "-w"
           ];
           
+          postInstall = ''
+            mv $out/bin/src $out/bin/smd
+          '';
+          
           meta = with pkgs.lib; {
             description = "Secure My Directory - CLI tool for containerized development";
             homepage = "https://github.com/user/smd";

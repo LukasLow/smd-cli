@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const version = "0.0.3"
+const version = "0.0.4"
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
@@ -26,7 +26,35 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("\nRun 'smd' for live mode or 'smd <command>' for temp mode.\n")
+		fmt.Printf("\nRun 'smd --open' for live mode or 'smd <command>' for temp mode.\n")
+		os.Exit(0)
+	}
+
+	// Show info page when no arguments
+	if len(os.Args) == 1 {
+		printInfo()
+		os.Exit(0)
+	}
+
+	// Handle --open / -o flag: always enters live mode
+	if os.Args[1] == "--open" || os.Args[1] == "-o" {
+		config, err := LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		if config == nil {
+			config, err = InteractiveInit()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		err = RunLiveMode(config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -61,7 +89,7 @@ func main() {
 		}
 	}
 
-	// Still no config and no args - interactive init
+	// Still no config and no args - interactive init (shouldn't reach here anymore since we handle no-args above)
 	if config == nil {
 		var err error
 		config, err = InteractiveInit()
@@ -71,12 +99,8 @@ func main() {
 		}
 	}
 
-	if len(os.Args) == 1 {
-		err = RunLiveMode(config)
-	} else {
-		args := os.Args[1:]
-		err = RunTempMode(config, args)
-	}
+	args := os.Args[1:]
+	err = RunTempMode(config, args)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -84,11 +108,25 @@ func main() {
 	}
 }
 
+func printInfo() {
+	fmt.Printf(`smd v%s - Secure My Directory
+Containerized development environments with automatic .env protection.
+
+Usage:
+  smd --open        Enter live mode (interactive shell with PWD mounted)
+  smd <command>     Run command in temp/dynamic mode (ephemeral container)
+  smd -i, --init    Initialize smd.toml with template selection
+  smd -h, --help    Show full help and templates
+  smd --version     Show version
+`, version)
+}
+
 func printHelp() {
 	fmt.Println(`smd - Secure My Directory
 
 Usage:
-  smd                    Enter live mode (interactive shell with PWD mounted)
+  smd                    Show info page
+  smd -o, --open         Enter live mode (interactive shell with PWD mounted)
   smd <command> [args]   Run command in temp/dynamic mode (ephemeral container)
   smd -i, --init         Initialize smd.toml with template selection
   smd -h, --help         Show this help
@@ -105,10 +143,10 @@ Templates (use with --init):
 
 Examples:
   smd --init             # Interactive template selection
+  smd --open             # Live mode with smd.toml
   smd npm install        # Auto-detects node, creates temp config
   smd python script.py   # Auto-detects python, runs in isolated container
   smd go run .           # Dynamic mode if no config exists
-  smd                    # Live mode with smd.toml
 
 Configuration:
   smd.toml               Project configuration (auto-generated if missing)

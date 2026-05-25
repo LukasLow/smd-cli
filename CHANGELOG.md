@@ -24,3 +24,15 @@
 - Fixed homepage URL in flake.nix
 - Updated README to reflect `smd --open` for live mode
 - Added CHANGELOG.md
+
+## [0.0.6] - 2026-05-25
+
+### Added
+- `smd --agentmd` creates/updates AGENTS.md with smd usage instructions
+- `runtime` option in `smd.toml` (`[container] runtime = "podman"` or `"docker"`, default: `podman`)
+- `runtimeName()` helper function to select container runtime at runtime
+
+### Changed
+- Version bumped to 0.0.6
+- Info page and help now show `--agentmd` flag
+- `exec.Command("podman", ...)` replaced with `exec.Command(runtimeName(config), ...)` in both live and temp modes

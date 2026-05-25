@@ -46,11 +46,12 @@ func RunLiveMode(config *Config) error {
 	image := getImage(config)
 	args = append(args, image)
 
+	runtime := runtimeName(config)
 	if os.Getenv("SMD_DEBUG") != "" {
-		fmt.Fprintf(os.Stderr, "podman %s\n", strings.Join(args, " "))
+		fmt.Fprintf(os.Stderr, "%s %s\n", runtime, strings.Join(args, " "))
 	}
 
-	cmd := exec.Command("podman", args...)
+	cmd := exec.Command(runtime, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -117,11 +118,12 @@ func RunTempMode(config *Config, command []string) error {
 		args = append(args, command...)
 	}
 
+	runtime := runtimeName(config)
 	if os.Getenv("SMD_DEBUG") != "" {
-		fmt.Fprintf(os.Stderr, "podman %s\n", strings.Join(args, " "))
+		fmt.Fprintf(os.Stderr, "%s %s\n", runtime, strings.Join(args, " "))
 	}
 
-	cmd := exec.Command("podman", args...)
+	cmd := exec.Command(runtime, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -152,4 +154,11 @@ func getPwd() string {
 		return "."
 	}
 	return pwd
+}
+
+func runtimeName(config *Config) string {
+	if config != nil && config.Container.Runtime != "" {
+		return config.Container.Runtime
+	}
+	return "podman"
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const version = "0.0.5"
+const version = "0.0.6"
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
@@ -16,6 +16,12 @@ func main() {
 
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Printf("smd version %s\n", version)
+		os.Exit(0)
+	}
+
+	// Handle --agentmd flag
+	if len(os.Args) > 1 && os.Args[1] == "--agentmd" {
+		generateAgentMD()
 		os.Exit(0)
 	}
 
@@ -115,9 +121,30 @@ Usage:
   smd --open        Enter live mode (interactive shell with PWD mounted)
   smd <command>     Run command in temp/dynamic mode (ephemeral container)
   smd -i, --init    Initialize smd.toml with template selection
+  smd --agentmd     Create/update AGENTS.md with smd usage instructions
   smd -h, --help    Show full help and templates
   smd --version     Show version
 `, version)
+}
+
+func generateAgentMD() {
+	content := `# Agent Instructions for this project
+
+Always use \` + "`smd`" + ` for building and running commands instead of running tools directly.
+
+- Instead of \` + "`go build`" + `, run \` + "`smd go build`" + `
+- Instead of \` + "`npm install`" + `, run \` + "`smd npm install`" + `
+- Instead of \` + "`python script.py`" + `, run \` + "`smd python script.py`" + `
+
+This ensures all commands execute inside the project's containerized environment.
+`
+
+	if err := os.WriteFile("AGENTS.md", []byte(content), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating AGENTS.md: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Created AGENTS.md with smd usage instructions.")
+	fmt.Println("Edit AGENTS.md to add project-specific agent instructions.")
 }
 
 func printHelp() {
@@ -128,6 +155,7 @@ Usage:
   smd -o, --open         Enter live mode (interactive shell with PWD mounted)
   smd <command> [args]   Run command in temp/dynamic mode (ephemeral container)
   smd -i, --init         Initialize smd.toml with template selection
+  smd --agentmd          Create/update AGENTS.md with smd usage instructions
   smd -h, --help         Show this help
   smd --version          Show version
 

@@ -29,6 +29,7 @@ type ProjectConfig struct {
 type ContainerConfig struct {
 	Image   string `toml:"image"`
 	Workdir string `toml:"workdir"`
+	Runtime string `toml:"runtime"`
 }
 
 type SecurityConfig struct {

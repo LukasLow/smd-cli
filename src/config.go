@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -133,7 +134,7 @@ func InteractiveInit() (*Config, error) {
 		},
 		Security: SecurityConfig{
 			AllowEnv:   []string{},
-			BlockFiles: defaultBlockFiles(selectedTypes),
+			BlockFiles: defaultBlockFilesForTypes(selectedTypes),
 		},
 		Live: LiveConfig{
 			MountPwd: true,
@@ -149,8 +150,14 @@ func InteractiveInit() (*Config, error) {
 		return nil, err
 	}
 
+	modeHint := "'smd --open' for live mode | 'smd <command>' for temp mode"
+	if mode == "live" {
+		modeHint = "'smd --open' to start live mode"
+	} else {
+		modeHint = "'smd <command>' to execute commands in temp mode"
+	}
 	fmt.Printf("\nCreated %s with %s mode preference.\n", configFile, mode)
-	fmt.Println("You can now run 'smd' for live mode or 'smd <command>' for temp mode.")
+	fmt.Printf("Run %s.\n", modeHint)
 
 	return config, nil
 }
@@ -176,48 +183,55 @@ func parseSelection(input string) []string {
 	return result
 }
 
-func defaultBlockFiles(types []string) []string {
-	blocks := []string{}
-	for _, t := range types {
-		switch t {
-		case "nodejs":
-			blocks = append(blocks, ".npmrc", ".yarnrc", ".pnpmfile.cjs")
-		case "python":
-			blocks = append(blocks, ".pypirc", "pip.conf")
-		case "go":
-			blocks = append(blocks, ".netrc")
-		case "rust":
-			blocks = append(blocks, ".cargo/credentials")
-		}
+func typePorts(t string) []string {
+	switch t {
+	case "nodejs":
+		return []string{"3000:3000", "8080:8080"}
+	case "python":
+		return []string{"5000:5000", "8000:8000"}
+	case "go":
+		return []string{"8080:8080"}
+	case "rust":
+		return []string{"8080:8080"}
+	default:
+		return nil
 	}
-	return blocks
 }
 
 func defaultPorts(types []string) []string {
-	ports := []string{}
+	seen := map[string]bool{}
+	var ports []string
 	for _, t := range types {
-		switch t {
-		case "nodejs":
-			ports = append(ports, "3000:3000", "8080:8080")
-		case "python":
-			ports = append(ports, "5000:5000", "8000:8000")
-		case "go":
-			ports = append(ports, "8080:8080")
-		case "rust":
-			ports = append(ports, "8080:8080")
+		for _, p := range typePorts(t) {
+			if !seen[p] {
+				seen[p] = true
+				ports = append(ports, p)
+			}
 		}
 	}
+	sort.Strings(ports)
 	return ports
 }
 
 func SaveConfig(config *Config) error {
-	f, err := os.Create(configFile)
+	tmpFile := configFile + ".tmp"
+	f, err := os.Create(tmpFile)
 	if err != nil {
-		return fmt.Errorf("failed to create %s: %w", configFile, err)
+		return fmt.Errorf("failed to create %s: %w", tmpFile, err)
 	}
-	defer f.Close()
 
-	return toml.NewEncoder(f).Encode(config)
+	if err := toml.NewEncoder(f).Encode(config); err != nil {
+		f.Close()
+		os.Remove(tmpFile)
+		return fmt.Errorf("failed to encode config: %w", err)
+	}
+	f.Close()
+
+	if err := os.Rename(tmpFile, configFile); err != nil {
+		os.Remove(tmpFile)
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+	return nil
 }
 
 func FindEnvFiles() ([]string, error) {
@@ -241,6 +255,15 @@ func FindEnvFiles() ([]string, error) {
 	return envFiles, nil
 }
 
+func isAllowedEnvFile(filename string, config *Config) bool {
+	for _, allowed := range config.Security.AllowEnv {
+		if allowed == filename {
+			return true
+		}
+	}
+	return false
+}
+
 func IsEnvFileBlocked(filename string, config *Config, isTempMode bool) bool {
 	if !isTempMode {
 		return false
@@ -250,13 +273,7 @@ func IsEnvFileBlocked(filename string, config *Config, isTempMode bool) bool {
 		return false
 	}
 
-	for _, allowed := range config.Security.AllowEnv {
-		if allowed == filename {
-			return false
-		}
-	}
-
-	return true
+	return !isAllowedEnvFile(filename, config)
 }
 
 func GetProjectName() string {

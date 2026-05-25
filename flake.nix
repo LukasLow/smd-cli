@@ -13,7 +13,7 @@
         
         smd = pkgs.buildGoModule {
           pname = "smd";
-          version = "0.0.4";
+          version = "0.0.5";
           
           src = ./.;
           
@@ -30,7 +30,7 @@
           
           meta = with pkgs.lib; {
             description = "Secure My Directory - CLI tool for containerized development";
-            homepage = "https://github.com/user/smd";
+            homepage = "https://github.com/LukasLow/smd-cli";
             license = licenses.mit;
             mainProgram = "smd";
           };

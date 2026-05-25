@@ -1,4 +1,4 @@
-module github.com/user/smd
+module github.com/LukasLow/smd-cli
 
 go 1.21
 

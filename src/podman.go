@@ -26,10 +26,15 @@ func RunLiveMode(config *Config) error {
 		return fmt.Errorf("failed to scan for env files: %w", err)
 	}
 
-	blockedFiles := checkBlockedFiles(envFiles, config, false)
-	if len(blockedFiles) > 0 {
-		fmt.Println("Note: The following sensitive files are available in live mode:")
-		for _, f := range blockedFiles {
+	var unlisted []string
+	for _, envFile := range envFiles {
+		if !isAllowedEnvFile(envFile, config) {
+			unlisted = append(unlisted, envFile)
+		}
+	}
+	if len(unlisted) > 0 {
+		fmt.Println("Live mode: the following .env files are mounted (not in allow list):")
+		for _, f := range unlisted {
 			fmt.Printf("  - %s\n", f)
 		}
 	}
@@ -92,24 +97,14 @@ func RunTempMode(config *Config, command []string) error {
 	image := getImage(config)
 	args = append(args, image)
 
-	// Check for dynamic nix mode
 	if IsDynamicMode(config) {
-		// Handle dynamic nix shell execution
 		nixPackages := GetNixPackages(config)
 		if dynamicPkg := os.Getenv("SMD_DYNAMIC_PACKAGE"); dynamicPkg != "" {
 			nixPackages = append([]string{dynamicPkg}, nixPackages...)
 		}
 
 		if len(nixPackages) > 0 {
-			// Build nix shell command: nix shell nixpkgs#pkg1 nixpkgs#pkg2 -- command
-			nixArgs := []string{"shell"}
-			for _, pkg := range nixPackages {
-				nixArgs = append(nixArgs, "nixpkgs#"+pkg)
-			}
-			nixArgs = append(nixArgs, "--")
-			nixArgs = append(nixArgs, command...)
-
-			args = append(args, "-c", "nix", "run", "nixpkgs#nix", "--", "shell")
+			args = append(args, "shell")
 			for _, pkg := range nixPackages {
 				args = append(args, "nixpkgs#"+pkg)
 			}

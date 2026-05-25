@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const version = "0.0.4"
+const version = "0.0.5"
 
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
@@ -89,9 +89,8 @@ func main() {
 		}
 	}
 
-	// Still no config and no args - interactive init (shouldn't reach here anymore since we handle no-args above)
+	// Still no config - interactive init
 	if config == nil {
-		var err error
 		config, err = InteractiveInit()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)

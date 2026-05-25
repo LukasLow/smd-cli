@@ -46,14 +46,14 @@ smd python script.py # Auto-detects Python
 smd go run .        # Auto-detects Go or uses dynamic mode
 
 # Live development mode (interactive shell)
-smd
+smd --open
 ```
 
 ## Usage
 
 ### Live Mode
 ```bash
-smd
+smd --open
 ```
 Starts an interactive container with your PWD mounted at `/app`. Ideal for development with file watching and long-running processes.
 
@@ -97,7 +97,7 @@ Initialize a project with `smd --init` and select a template:
 
 | Mode | Use Case | PWD Mount | .env Files |
 |------|----------|-----------|------------|
-| Live | Development, dev servers | Yes (read-write) | Available with warning |
+| Live | Development, dev servers | Yes (read-write) | Available with warning (use `smd --open`) |
 | Temp | Install, build, one-off | Yes (configurable) | Blocked by default |
 
 ## Configuration (smd.toml)

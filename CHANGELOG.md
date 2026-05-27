@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.0] - 2026-05-27
+
+### Added
+- Persistent package cache volumes (`smd_pkg_npm`, `smd_pkg_pip`, `smd_pkg_go`, `smd_pkg_cargo`, and more)
+- New `[volume]` config section in `smd.toml` with per-package toggles
+- `buildVolumeArgs()` helper to inject named Docker volumes for package caches
+- Volumes are shared across all projects using the same volume name — saves download time
+- Automatic volume defaults when initializing from templates
+
+### Changed
+- Version bumped to 0.1.0
+
 ## [0.0.5] - 2026-05-25
 
 ### Changed

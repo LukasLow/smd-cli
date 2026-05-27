@@ -93,12 +93,41 @@ Initialize a project with `smd --init` and select a template:
 - In **temp mode**: All `.env` files are blocked unless explicitly whitelisted in `smd.toml`
 - In **live mode**: Files are available but a warning is shown
 
+### Package Cache Volumes
+
+smd uses named Docker volumes to persist package caches across container runs. This means `npm install`, `pip install`, `go mod download`, etc. only download packages once — even across different projects.
+
+| Volume | Cache Path | Used By |
+|--------|-----------|---------|
+| `smd_pkg_npm` | `/root/.npm` | npm, yarn, pnpm |
+| `smd_pkg_yarn` | `/root/.yarn` | Yarn |
+| `smd_pkg_pnpm` | `/root/.local/share/pnpm` | pnpm |
+| `smd_pkg_pip` | `/root/.cache/pip` | pip |
+| `smd_pkg_poetry` | `/root/.cache/pypoetry` | Poetry |
+| `smd_pkg_go` | `/go/pkg/mod` | Go modules |
+| `smd_pkg_cargo` | `/usr/local/cargo/registry` | Cargo |
+| `smd_pkg_bun` | `/root/.bun/install/cache` | Bun |
+| `smd_pkg_conda` | `/opt/conda/pkgs` | Conda |
+
+Volumes are auto-created on first use and shared across all projects using the same volume name. Enable/disable them in `smd.toml`:
+
+```toml
+[volume]
+enabled = true
+
+[volume.packages]
+npm = true
+pip = true
+go = true
+cargo = true
+```
+
 ### Modes
 
-| Mode | Use Case | PWD Mount | .env Files |
-|------|----------|-----------|------------|
-| Live | Development, dev servers | Yes (read-write) | Available with warning (use `smd --open`) |
-| Temp | Install, build, one-off | Yes (configurable) | Blocked by default |
+| Mode | Use Case | PWD Mount | .env Files | Cache Volumes |
+|------|----------|-----------|------------|---------------|
+| Live | Development, dev servers | Yes (read-write) | Available with warning (use `smd --open`) | Yes |
+| Temp | Install, build, one-off | Yes (configurable) | Blocked by default | Yes |
 
 ## Configuration (smd.toml)
 
@@ -114,6 +143,15 @@ workdir = "/app"
 [security]
 allow_env = [".env.local"]  # Whitelist for temp mode
 block_files = [".npmrc", ".yarnrc"]
+
+[volume]
+enabled = true
+
+[volume.packages]
+npm = true
+pip = true
+go = true
+cargo = true
 
 [live]
 mount_pwd = true

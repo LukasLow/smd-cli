@@ -17,6 +17,7 @@ type Config struct {
 	Project   ProjectConfig   `toml:"project"`
 	Container ContainerConfig `toml:"container"`
 	Security  SecurityConfig  `toml:"security"`
+	Volume    VolumeConfig    `toml:"volume"`
 	Live      LiveConfig      `toml:"live"`
 	Temp      TempConfig      `toml:"temp"`
 }
@@ -46,6 +47,53 @@ type TempConfig struct {
 	AllowEnv []string `toml:"allow_env"`
 	MountPwd bool     `toml:"mount_pwd"`
 	ReadOnly bool     `toml:"read_only"`
+}
+
+type VolumeConfig struct {
+	Enabled  bool            `toml:"enabled"`
+	Packages map[string]bool `toml:"packages"`
+}
+
+type PackageCache struct {
+	VolumeName string
+	MountPath  string
+}
+
+var PackageCachePaths = map[string]PackageCache{
+	"npm":   {VolumeName: "smd_pkg_npm",   MountPath: "/root/.npm"},
+	"yarn":  {VolumeName: "smd_pkg_yarn",  MountPath: "/root/.yarn"},
+	"pnpm":  {VolumeName: "smd_pkg_pnpm",  MountPath: "/root/.local/share/pnpm"},
+	"pip":   {VolumeName: "smd_pkg_pip",   MountPath: "/root/.cache/pip"},
+	"poetry": {VolumeName: "smd_pkg_poetry", MountPath: "/root/.cache/pypoetry"},
+	"go":    {VolumeName: "smd_pkg_go",    MountPath: "/go/pkg/mod"},
+	"cargo": {VolumeName: "smd_pkg_cargo", MountPath: "/usr/local/cargo/registry"},
+	"bun":   {VolumeName: "smd_pkg_bun",   MountPath: "/root/.bun/install/cache"},
+	"conda": {VolumeName: "smd_pkg_conda", MountPath: "/opt/conda/pkgs"},
+}
+
+func defaultVolumesForTypes(types []string) map[string]bool {
+	volumes := map[string]bool{}
+	for _, t := range types {
+		switch t {
+		case "nodejs", "javascript":
+			volumes["npm"] = true
+		case "python":
+			volumes["pip"] = true
+		case "go":
+			volumes["go"] = true
+		case "rust":
+			volumes["cargo"] = true
+		case "bun":
+			volumes["bun"] = true
+		case "conda":
+			volumes["conda"] = true
+		}
+	}
+	// Always enable if any volumes were detected
+	if len(volumes) > 0 {
+		return volumes
+	}
+	return nil
 }
 
 var supportedEnvironments = map[string]string{
@@ -124,6 +172,7 @@ func InteractiveInit() (*Config, error) {
 		projectName = "my-project"
 	}
 
+	volumes := defaultVolumesForTypes(selectedTypes)
 	config := &Config{
 		Project: ProjectConfig{
 			Name: projectName,
@@ -136,6 +185,10 @@ func InteractiveInit() (*Config, error) {
 		Security: SecurityConfig{
 			AllowEnv:   []string{},
 			BlockFiles: defaultBlockFilesForTypes(selectedTypes),
+		},
+		Volume: VolumeConfig{
+			Enabled:  len(volumes) > 0,
+			Packages: volumes,
 		},
 		Live: LiveConfig{
 			MountPwd: true,

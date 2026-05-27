@@ -1,0 +1,26 @@
+[project]
+  name = "smd-cli"
+  type = ["go"]
+
+[container]
+  image = "docker.io/golang:1.22-alpine"
+  workdir = "/app"
+
+[security]
+  allow_env = []
+  block_files = [".netrc"]
+
+[volume]
+  enabled = true
+
+[volume.packages]
+  go = true
+
+[live]
+  mount_pwd = true
+  ports = ["8080:8080"]
+
+[temp]
+  allow_env = []
+  mount_pwd = true
+  read_only = false

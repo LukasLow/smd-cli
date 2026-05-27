@@ -224,6 +224,7 @@ func TemplateInitInteractive() (*Config, error) {
 func ConfigFromTemplate(template *Template) (*Config, error) {
 	projectName := GetProjectName()
 
+	volumes := defaultVolumesForTypes(template.Type)
 	config := &Config{
 		Project: ProjectConfig{
 			Name: projectName,
@@ -236,6 +237,10 @@ func ConfigFromTemplate(template *Template) (*Config, error) {
 		Security: SecurityConfig{
 			AllowEnv:   []string{},
 			BlockFiles: defaultBlockFilesForTypes(template.Type),
+		},
+		Volume: VolumeConfig{
+			Enabled:  len(volumes) > 0,
+			Packages: volumes,
 		},
 		Live: LiveConfig{
 			MountPwd: true,

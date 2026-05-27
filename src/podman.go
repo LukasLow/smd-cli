@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -16,6 +17,8 @@ func RunLiveMode(config *Config) error {
 		"-w", config.Container.Workdir,
 		"--name", fmt.Sprintf("%s-live", config.Project.Name),
 	}
+
+	args = append(args, buildVolumeArgs(config)...)
 
 	for _, port := range config.Live.Ports {
 		args = append(args, "-p", port)
@@ -93,6 +96,8 @@ func RunTempMode(config *Config, command []string) error {
 		args = append(args, "-v", fmt.Sprintf("%s:%s%s", getPwd(), config.Container.Workdir, mountOpt))
 	}
 
+	args = append(args, buildVolumeArgs(config)...)
+
 	args = append(args, "-w", config.Container.Workdir)
 
 	image := getImage(config)
@@ -160,5 +165,28 @@ func runtimeName(config *Config) string {
 	if config != nil && config.Container.Runtime != "" {
 		return config.Container.Runtime
 	}
-	return "podman"
+	return "docker"
+}
+
+func buildVolumeArgs(config *Config) []string {
+	var args []string
+	if config == nil || !config.Volume.Enabled || len(config.Volume.Packages) == 0 {
+		return args
+	}
+
+	var names []string
+	for pkgName, enabled := range config.Volume.Packages {
+		if enabled {
+			if _, ok := PackageCachePaths[pkgName]; ok {
+				names = append(names, pkgName)
+			}
+		}
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		cache := PackageCachePaths[name]
+		args = append(args, "-v", fmt.Sprintf("%s:%s", cache.VolumeName, cache.MountPath))
+	}
+	return args
 }

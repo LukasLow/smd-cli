@@ -225,6 +225,7 @@ func ConfigFromTemplate(template *Template) (*Config, error) {
 	projectName := GetProjectName()
 
 	volumes := defaultVolumesForTypes(template.Type)
+	ports := defaultPorts(template.Type)
 	config := &Config{
 		Project: ProjectConfig{
 			Name: projectName,
@@ -242,9 +243,13 @@ func ConfigFromTemplate(template *Template) (*Config, error) {
 			Enabled:  len(volumes) > 0,
 			Packages: volumes,
 		},
+		Session: SessionConfig{
+			Enabled: true,
+			Ports:   ports,
+		},
 		Live: LiveConfig{
 			MountPwd: true,
-			Ports:    defaultPorts(template.Type),
+			Ports:    ports,
 		},
 		Temp: TempConfig{
 			AllowEnv: []string{},

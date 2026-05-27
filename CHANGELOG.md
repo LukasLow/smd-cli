@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0] - 2026-05-27
+
+### Added
+- **Session mode** (new default): `smd <cmd>` creates a persistent container (`<project>_s`).
+  State (apt, pip, npm, files) survives across commands via `docker exec`.
+- **Temp mode** (`smd -t <cmd>`): Ephemeral `--rm` container (`<project>_t`), replaces previous default.
+- **`smd --close`**: Destroys the session container.
+- **New info page**: Designed for AI agents — shows all usage modes at a glance.
+- **`SessionConfig`** with `enabled` and `ports` in `smd.toml`.
+
+### Changed
+- `smd <cmd>` now uses session mode instead of temp mode by default.
+- Temp container gets a name (`<project>_t`) for consistency.
+- Live container uses `containerName()` helper for consistent naming.
+- `AGENTS.md` now covers ALL commands (ls, cat, apt, git, etc.) through smd.
+- README completely rewritten for the new session-mode architecture.
+
 ## [0.1.0] - 2026-05-27
 
 ### Added
@@ -12,39 +29,20 @@
 ### Changed
 - Version bumped to 0.1.0
 
-## [0.0.5] - 2026-05-25
-
-### Changed
-- `smd` (no args) now shows an info page with version and brief usage
-- `smd -o` / `smd --open` starts live mode (the old `smd` behavior)
-- Version bumped to 0.0.5
-
-### Fixed
-- Dynamic nix mode podman command now correctly uses `nix shell` via the image's entrypoint instead of a broken `-c nix run` chain
-- Interactive mode selection (temp/live) is now properly reflected in the output message
-- Live mode .env file warning now actually shows when env files are mounted outside the allow list
-- Removed dead `nixArgs` block in podman.go that was built but never used
-- SaveConfig now uses atomic write (temp file + rename) to prevent config corruption
-- Port deduplication in `defaultPorts` to avoid duplicate `8080:8080` entries
-- Removed duplicate `defaultBlockFiles` function (consolidated into `defaultBlockFilesForTypes`)
-- Fixed variable shadowing in main.go (`var err error` in inner scope)
-- Fixed stale comment and improved error messages
-
-### Maintenance
-- Added test suite for core functions (`main_test.go`)
-- Fixed module path in go.mod (`github.com/user/smd` → `github.com/LukasLow/smd-cli`)
-- Fixed homepage URL in flake.nix
-- Updated README to reflect `smd --open` for live mode
-- Added CHANGELOG.md
-
 ## [0.0.6] - 2026-05-25
 
 ### Added
-- `smd --agentmd` creates/updates AGENTS.md with smd usage instructions
-- `runtime` option in `smd.toml` (`[container] runtime = "podman"` or `"docker"`, default: `podman`)
-- `runtimeName()` helper function to select container runtime at runtime
+- `--agentmd` creates/updates AGENTS.md with smd usage instructions
+- `runtime` option in `smd.toml` for configurable container runtime
 
 ### Changed
 - Version bumped to 0.0.6
-- Info page and help now show `--agentmd` flag
-- `exec.Command("podman", ...)` replaced with `exec.Command(runtimeName(config), ...)` in both live and temp modes
+
+## [0.0.5] - 2026-05-25
+
+### Changed
+- `smd` (no args) now shows an info page
+- `smd -o` / `smd --open` starts live mode
+
+### Fixed
+- Various bugfixes: nix shell command, env file handling, config saving

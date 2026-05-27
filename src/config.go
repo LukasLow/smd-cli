@@ -18,6 +18,7 @@ type Config struct {
 	Container ContainerConfig `toml:"container"`
 	Security  SecurityConfig  `toml:"security"`
 	Volume    VolumeConfig    `toml:"volume"`
+	Session   SessionConfig   `toml:"session"`
 	Live      LiveConfig      `toml:"live"`
 	Temp      TempConfig      `toml:"temp"`
 }
@@ -47,6 +48,11 @@ type TempConfig struct {
 	AllowEnv []string `toml:"allow_env"`
 	MountPwd bool     `toml:"mount_pwd"`
 	ReadOnly bool     `toml:"read_only"`
+}
+
+type SessionConfig struct {
+	Enabled bool     `toml:"enabled"`
+	Ports   []string `toml:"ports"`
 }
 
 type VolumeConfig struct {
@@ -117,7 +123,33 @@ func LoadConfig() (*Config, error) {
 		config.Container.Workdir = "/app"
 	}
 
+	// Default session to enabled (user can opt out with session.enabled = false)
+	config.Session.Enabled = true
+	if config.Session.Ports == nil {
+		config.Session.Ports = defaultPorts(config.Project.Type)
+	}
+
 	return &config, nil
+}
+
+func containerName(config *Config, suffix string) string {
+	return sanitizeName(fmt.Sprintf("%s_%s", config.Project.Name, suffix))
+}
+
+func liveContainerName(config *Config) string {
+	return sanitizeName(fmt.Sprintf("%s-live", config.Project.Name))
+}
+
+func sanitizeName(name string) string {
+	var result strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == '-' {
+			result.WriteRune(r)
+		} else {
+			result.WriteRune('-')
+		}
+	}
+	return result.String()
 }
 
 func InteractiveInit() (*Config, error) {
@@ -173,6 +205,7 @@ func InteractiveInit() (*Config, error) {
 	}
 
 	volumes := defaultVolumesForTypes(selectedTypes)
+	ports := defaultPorts(selectedTypes)
 	config := &Config{
 		Project: ProjectConfig{
 			Name: projectName,
@@ -190,9 +223,13 @@ func InteractiveInit() (*Config, error) {
 			Enabled:  len(volumes) > 0,
 			Packages: volumes,
 		},
+		Session: SessionConfig{
+			Enabled: true,
+			Ports:   ports,
+		},
 		Live: LiveConfig{
 			MountPwd: true,
-			Ports:    defaultPorts(selectedTypes),
+			Ports:    ports,
 		},
 		Temp: TempConfig{
 			AllowEnv: []string{},

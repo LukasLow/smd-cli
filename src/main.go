@@ -6,44 +6,35 @@ import (
 	"strings"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
+	args := os.Args[1:]
+
+	if len(args) == 0 {
+		printInfo()
+		return
+	}
+
+	switch args[0] {
+	case "-h", "--help":
 		printHelp()
-		os.Exit(0)
-	}
-
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		return
+	case "--version":
 		fmt.Printf("smd version %s\n", version)
-		os.Exit(0)
-	}
-
-	// Handle --agentmd flag
-	if len(os.Args) > 1 && os.Args[1] == "--agentmd" {
+		return
+	case "--agentmd":
 		generateAgentMD()
-		os.Exit(0)
-	}
-
-	// Handle --init / -i flag
-	if len(os.Args) > 1 && (os.Args[1] == "--init" || os.Args[1] == "-i") {
+		return
+	case "-i", "--init":
 		_, err := TemplateInitInteractive()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("\nRun 'smd --open' for live mode or 'smd <command>' for temp mode.\n")
-		os.Exit(0)
-	}
-
-	// Show info page when no arguments
-	if len(os.Args) == 1 {
-		printInfo()
-		os.Exit(0)
-	}
-
-	// Handle --open / -o flag: always enters live mode
-	if os.Args[1] == "--open" || os.Args[1] == "-o" {
+		fmt.Printf("\nRun 'smd --open' for live mode or 'smd <command>' for session mode.\n")
+		return
+	case "-o", "--open":
 		config, err := LoadConfig()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
@@ -61,8 +52,38 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		os.Exit(0)
+		return
+	case "--close":
+		config, err := LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		if config == nil {
+			fmt.Println("No smd.toml found. Nothing to clean.")
+			return
+		}
+		err = DestroySessionContainer(config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
+
+	// Check for -t / --temp flag
+	tempMode := false
+	cmdStart := 0
+	if args[0] == "-t" || args[0] == "--temp" {
+		tempMode = true
+		cmdStart = 1
+		if len(args) < 2 {
+			fmt.Println("Error: -t/--temp requires a command")
+			os.Exit(1)
+		}
+	}
+
+	command := args[cmdStart:]
 
 	config, err := LoadConfig()
 	if err != nil {
@@ -70,9 +91,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// No config exists - try auto-detection from command
-	if config == nil && len(os.Args) > 1 {
-		cmd := strings.Join(os.Args[1:], " ")
+	if config == nil {
+		cmd := strings.Join(command, " ")
 		if template, ok := DetectTemplateFromCommand(cmd); ok {
 			fmt.Printf("No smd.toml found. Auto-detected '%s' from command.\n", template.Name)
 			config, err = ConfigFromTemplate(template)
@@ -81,7 +101,6 @@ func main() {
 				os.Exit(1)
 			}
 		} else {
-			// Fallback: use dynamic mode (nixos)
 			fmt.Println("No smd.toml found. Using dynamic mode (nixos + nix shell).")
 			dynamicTemplate := templates["dynamic"]
 			config, err = ConfigFromTemplate(&dynamicTemplate)
@@ -89,23 +108,16 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
 				os.Exit(1)
 			}
-			// Store the command as a nix package for dynamic execution
-			firstArg := os.Args[1]
+			firstArg := command[0]
 			os.Setenv("SMD_DYNAMIC_PACKAGE", firstArg)
 		}
 	}
 
-	// Still no config - interactive init
-	if config == nil {
-		config, err = InteractiveInit()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
-			os.Exit(1)
-		}
+	if tempMode {
+		err = RunTempMode(config, command)
+	} else {
+		err = RunSessionMode(config, command)
 	}
-
-	args := os.Args[1:]
-	err = RunTempMode(config, args)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -114,30 +126,61 @@ func main() {
 }
 
 func printInfo() {
-	fmt.Printf(`smd v%s - Secure My Directory
-Containerized development environments with automatic .env protection.
+	fmt.Printf(`smd v%s — Containerized development for AI agents
+
+Every command runs in a persistent session container.
+State (installed packages, files, config) survives across commands.
 
 Usage:
-  smd --open        Enter live mode (interactive shell with PWD mounted)
-  smd <command>     Run command in temp/dynamic mode (ephemeral container)
-  smd -i, --init    Initialize smd.toml with template selection
-  smd --agentmd     Create/update AGENTS.md with smd usage instructions
-  smd -h, --help    Show full help and templates
-  smd --version     Show version
+  smd <command> [args]     Run in session container (persistent, default)
+  smd -t <command> [args]  Run in temp container (ephemeral, --rm)
+  smd --open               Interactive shell (live mode)
+  smd --close              Destroy the session container
+
+Setup:
+  smd -i, --init           Create smd.toml with template selection
+  smd --agentmd            Create AGENTS.md with smd usage instructions
+  smd -h, --help           Full help and templates
+  smd --version            Show version
+
+Examples:
+  smd apt install curl     Install packages persistently
+  smd python script.py     Run in Python
+  smd npm install           Install npm dependencies
+  smd -t python test.py    Ephemeral — no state saved
+
+Just run any command. State persists. No setup needed.
 `, version)
 }
 
 func generateAgentMD() {
-	content := `# Agent Instructions for this project
-
-Always use \` + "`smd`" + ` for building and running commands instead of running tools directly.
-
-- Instead of \` + "`go build`" + `, run \` + "`smd go build`" + `
-- Instead of \` + "`npm install`" + `, run \` + "`smd npm install`" + `
-- Instead of \` + "`python script.py`" + `, run \` + "`smd python script.py`" + `
-
-This ensures all commands execute inside the project's containerized environment.
-`
+	content := "# Agent Instructions for this project\n\n" +
+		"ALWAYS use `smd` for EVERY command. Never run commands directly.\n\n" +
+		"## Why?\n" +
+		"Every command runs in an isolated container with:\n" +
+		"- **Persistent session** — apt, pip, npm, files all survive across commands\n" +
+		"- **Automatic .env protection** — sensitive files are blocked in temp mode\n" +
+		"- **Pre-configured runtimes** — no need to install Node, Python, Go, etc.\n\n" +
+		"## All commands go through smd\n" +
+		"```\n" +
+		"smd ls                 # List files\n" +
+		"smd cat file.txt       # Read files\n" +
+		"smd head file.txt      # View file start\n" +
+		"smd python script.py   # Run Python\n" +
+		"smd npm install        # Install npm packages\n" +
+		"smd go build           # Build Go project\n" +
+		"smd apt install curl   # Install system packages\n" +
+		"smd git status         # Git operations\n" +
+		"smd pip install flask  # Install Python packages\n" +
+		"smd make               # Run Make\n" +
+		"smd cargo build        # Build Rust project\n" +
+		"```\n\n" +
+		"## Tips\n" +
+		"- **State persists** — first `smd <cmd>` creates a session container, subsequent commands reuse it\n" +
+		"- **Temp mode** — use `smd -t <cmd>` for a truly ephemeral one-shot command\n" +
+		"- **Cleanup** — `smd --close` destroys the session container\n" +
+		"- **First run** — just run `smd <cmd>` and everything auto-detects\n\n" +
+		"This ensures all commands execute inside the project's containerized environment.\n"
 
 	if err := os.WriteFile("AGENTS.md", []byte(content), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating AGENTS.md: %v\n", err)
@@ -151,13 +194,23 @@ func printHelp() {
 	fmt.Println(`smd - Secure My Directory
 
 Usage:
-  smd                    Show info page
-  smd -o, --open         Enter live mode (interactive shell with PWD mounted)
-  smd <command> [args]   Run command in temp/dynamic mode (ephemeral container)
-  smd -i, --init         Initialize smd.toml with template selection
-  smd --agentmd          Create/update AGENTS.md with smd usage instructions
-  smd -h, --help         Show this help
-  smd --version          Show version
+  smd                          Show info page
+  smd <command> [args]         Session mode (persistent container, default)
+  smd -t <command> [args]      Temp mode (ephemeral container, --rm)
+  smd -o, --open               Live mode (interactive shell)
+  smd --close                  Destroy session container
+  smd -i, --init               Create smd.toml with template selection
+  smd --agentmd                Create AGENTS.md with smd usage instructions
+  smd -h, --help               Show this help
+  smd --version                Show version
+
+Session mode (default):
+  Creates a persistent container (<project>_s). All state survives.
+  Container is created on first use, stopped between commands.
+
+Temp mode (-t):
+  Runs a command in an ephemeral container (<project>_t).
+  Container is removed after the command. Fresh start every time.
 
 Templates (use with --init):
   full              Everything installed
@@ -169,17 +222,17 @@ Templates (use with --init):
   elixir, gleam     Other languages
 
 Examples:
-  smd --init             # Interactive template selection
-  smd --open             # Live mode with smd.toml
-  smd npm install        # Auto-detects node, creates temp config
-  smd python script.py   # Auto-detects python, runs in isolated container
-  smd go run .           # Dynamic mode if no config exists
+  smd npm install          # Session: npm deps persist
+  smd -t npm install        # Temp: fresh npm install each time
+  smd --open                # Interactive shell
+  smd python script.py      # Session: Python in persistent env
+  smd --close               # Clean up session container
 
 Configuration:
-  smd.toml               Project configuration (auto-generated if missing)
+  smd.toml                  Auto-generated on first command
 
 Environment Variables:
-  SMD_IMAGE              Override container image
-  SMD_DEBUG              Show podman commands being executed
-  SMD_DYNAMIC_PACKAGE    Package for dynamic nix shell mode`)
+  SMD_IMAGE                 Override the container image
+  SMD_DEBUG                 Show podman/docker commands being executed
+  SMD_DYNAMIC_PACKAGE       Package for dynamic nix shell mode`)
 }

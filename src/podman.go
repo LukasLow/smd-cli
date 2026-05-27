@@ -15,7 +15,7 @@ func RunLiveMode(config *Config) error {
 		"-it",
 		"-v", fmt.Sprintf("%s:%s", getPwd(), config.Container.Workdir),
 		"-w", config.Container.Workdir,
-		"--name", fmt.Sprintf("%s-live", config.Project.Name),
+		"--name", liveContainerName(config),
 	}
 
 	args = append(args, buildVolumeArgs(config)...)
@@ -66,6 +66,7 @@ func RunTempMode(config *Config, command []string) error {
 	args := []string{
 		"run",
 		"--rm",
+		"--name", containerName(config, "t"),
 	}
 
 	envFiles, err := FindEnvFiles()
@@ -166,6 +167,109 @@ func runtimeName(config *Config) string {
 		return config.Container.Runtime
 	}
 	return "docker"
+}
+
+func RunSessionMode(config *Config, command []string) error {
+	name := containerName(config, "s")
+	runtime := runtimeName(config)
+
+	if err := ensureSessionContainer(config, name, runtime); err != nil {
+		return err
+	}
+
+	if err := exec.Command(runtime, "start", name).Run(); err != nil {
+		return fmt.Errorf("failed to start session container: %w", err)
+	}
+	defer exec.Command(runtime, "stop", name).Run()
+
+	execArgs := []string{"exec", "-i", "-w", config.Container.Workdir, name}
+
+	if IsDynamicMode(config) {
+		nixPkgs := GetNixPackages(config)
+		if len(nixPkgs) > 0 {
+			execArgs = append(execArgs, "nix", "shell")
+			for _, p := range nixPkgs {
+				execArgs = append(execArgs, "nixpkgs#"+p)
+			}
+			execArgs = append(execArgs, "--")
+		}
+	}
+
+	execArgs = append(execArgs, command...)
+
+	if os.Getenv("SMD_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "%s %s\n", runtime, strings.Join(execArgs, " "))
+	}
+
+	cmd := exec.Command(runtime, execArgs...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
+func ensureSessionContainer(config *Config, name, runtime string) error {
+	check := exec.Command(runtime, "ps", "-a", "--filter", fmt.Sprintf("name=^%s$", name), "--format", "{{.Names}}")
+	out, _ := check.Output()
+	if strings.TrimSpace(string(out)) != "" {
+		return nil
+	}
+
+	createArgs := []string{
+		"create",
+		"--name", name,
+		"-v", fmt.Sprintf("%s:%s", getPwd(), config.Container.Workdir),
+		"-w", config.Container.Workdir,
+	}
+
+	createArgs = append(createArgs, buildVolumeArgs(config)...)
+
+	for _, port := range config.Session.Ports {
+		createArgs = append(createArgs, "-p", port)
+	}
+
+	envFiles, _ := FindEnvFiles()
+	var unlisted []string
+	for _, ef := range envFiles {
+		if !isAllowedEnvFile(ef, config) {
+			unlisted = append(unlisted, ef)
+		}
+	}
+	if len(unlisted) > 0 {
+		fmt.Println("Session container created with .env files (not in whitelist):")
+		for _, f := range unlisted {
+			fmt.Printf("  - %s\n", f)
+		}
+	}
+	for _, ef := range envFiles {
+		createArgs = append(createArgs, "--env-file", ef)
+	}
+
+	createArgs = append(createArgs, getImage(config), "sleep", "infinity")
+
+	if os.Getenv("SMD_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "%s %s\n", runtime, strings.Join(createArgs, " "))
+	}
+
+	if err := exec.Command(runtime, createArgs...).Run(); err != nil {
+		return fmt.Errorf("failed to create session container: %w", err)
+	}
+	fmt.Printf("Created session container: %s\n", name)
+	return nil
+}
+
+func DestroySessionContainer(config *Config) error {
+	name := containerName(config, "s")
+	runtime := runtimeName(config)
+
+	exec.Command(runtime, "stop", name).Run()
+	err := exec.Command(runtime, "rm", "-f", name).Run()
+	if err != nil {
+		return fmt.Errorf("failed to remove session container: %w", err)
+	}
+	fmt.Printf("Destroyed session container: %s\n", name)
+	return nil
 }
 
 func buildVolumeArgs(config *Config) []string {

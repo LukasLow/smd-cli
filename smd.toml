@@ -16,6 +16,9 @@
 [volume.packages]
   go = true
 
+[session]
+  enabled = true
+
 [live]
   mount_pwd = true
   ports = ["8080:8080"]

@@ -141,6 +141,37 @@ func TestGetProjectName(t *testing.T) {
 	}
 }
 
+func TestContainerName(t *testing.T) {
+	cfg := &Config{Project: ProjectConfig{Name: "my-app"}}
+	if n := containerName(cfg, "s"); n != "my-app_s" {
+		t.Errorf("containerName => %q, want %q", n, "my-app_s")
+	}
+	if n := containerName(cfg, "t"); n != "my-app_t" {
+		t.Errorf("containerName => %q, want %q", n, "my-app_t")
+	}
+}
+
+func TestSanitizeName(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"hello-world", "hello-world"},
+		{"my app", "my-app"},
+		{"test_project", "test_project"},
+		{"foo/bar:baz", "foo-bar-baz"},
+	}
+	for _, tc := range tests {
+		if got := sanitizeName(tc.in); got != tc.want {
+			t.Errorf("sanitizeName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestLiveContainerName(t *testing.T) {
+	cfg := &Config{Project: ProjectConfig{Name: "my-app"}}
+	if n := liveContainerName(cfg); n != "my-app-live" {
+		t.Errorf("liveContainerName => %q, want %q", n, "my-app-live")
+	}
+}
+
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

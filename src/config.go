@@ -18,6 +18,7 @@ type Config struct {
 	Container ContainerConfig `toml:"container"`
 	Security  SecurityConfig  `toml:"security"`
 	Volume    VolumeConfig    `toml:"volume"`
+	Port      PortConfig      `toml:"port"`
 	Session   SessionConfig   `toml:"session"`
 	Live      LiveConfig      `toml:"live"`
 	Temp      TempConfig      `toml:"temp"`
@@ -55,9 +56,14 @@ type SessionConfig struct {
 	Ports   []string `toml:"ports"`
 }
 
+type PortConfig struct {
+	Publish []string `toml:"publish"`
+}
+
 type VolumeConfig struct {
 	Enabled  bool            `toml:"enabled"`
 	Packages map[string]bool `toml:"packages"`
+	Mounts   []string        `toml:"mounts"`
 }
 
 type PackageCache struct {
@@ -365,6 +371,13 @@ func IsEnvFileBlocked(filename string, config *Config, isTempMode bool) bool {
 	}
 
 	return !isAllowedEnvFile(filename, config)
+}
+
+func getPorts(modePorts []string, config *Config) []string {
+	if len(config.Port.Publish) > 0 {
+		return config.Port.Publish
+	}
+	return modePorts
 }
 
 func GetProjectName() string {

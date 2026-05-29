@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.1] - 2026-05-27
+
+### Added
+- `[port] publish` config section for unified port forwarding across all modes
+- `[volume] mounts` — user-defined named volumes and bind mounts (`mounts = ["vol:/path"]`)
+- `getPorts()` helper to unify port resolution (Port.Publish overrides mode-specific ports)
+
+### Changed
+- Version bumped to 0.2.1
+
 ## [0.2.0] - 2026-05-27
 
 ### Added

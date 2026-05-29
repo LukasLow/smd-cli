@@ -20,7 +20,7 @@ func RunLiveMode(config *Config) error {
 
 	args = append(args, buildVolumeArgs(config)...)
 
-	for _, port := range config.Live.Ports {
+	for _, port := range getPorts(config.Live.Ports, config) {
 		args = append(args, "-p", port)
 	}
 
@@ -98,6 +98,10 @@ func RunTempMode(config *Config, command []string) error {
 	}
 
 	args = append(args, buildVolumeArgs(config)...)
+
+	for _, port := range getPorts(nil, config) {
+		args = append(args, "-p", port)
+	}
 
 	args = append(args, "-w", config.Container.Workdir)
 
@@ -225,7 +229,7 @@ func ensureSessionContainer(config *Config, name, runtime string) error {
 
 	createArgs = append(createArgs, buildVolumeArgs(config)...)
 
-	for _, port := range config.Session.Ports {
+	for _, port := range getPorts(config.Session.Ports, config) {
 		createArgs = append(createArgs, "-p", port)
 	}
 
@@ -274,10 +278,11 @@ func DestroySessionContainer(config *Config) error {
 
 func buildVolumeArgs(config *Config) []string {
 	var args []string
-	if config == nil || !config.Volume.Enabled || len(config.Volume.Packages) == 0 {
+	if config == nil || !config.Volume.Enabled {
 		return args
 	}
 
+	// Package cache volumes
 	var names []string
 	for pkgName, enabled := range config.Volume.Packages {
 		if enabled {
@@ -292,5 +297,11 @@ func buildVolumeArgs(config *Config) []string {
 		cache := PackageCachePaths[name]
 		args = append(args, "-v", fmt.Sprintf("%s:%s", cache.VolumeName, cache.MountPath))
 	}
+
+	// User-defined volume mounts (named volumes or bind mounts)
+	for _, m := range config.Volume.Mounts {
+		args = append(args, "-v", m)
+	}
+
 	return args
 }

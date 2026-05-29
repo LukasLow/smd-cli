@@ -172,6 +172,40 @@ func TestLiveContainerName(t *testing.T) {
 	}
 }
 
+func TestGetPorts(t *testing.T) {
+	cfg := &Config{Port: PortConfig{Publish: []string{"8080:8080"}}}
+	got := getPorts([]string{"3000:3000"}, cfg)
+	if len(got) != 1 || got[0] != "8080:8080" {
+		t.Errorf("getPorts should prefer Port.Publish, got %v", got)
+	}
+
+	cfg2 := &Config{}
+	got2 := getPorts([]string{"3000:3000"}, cfg2)
+	if len(got2) != 1 || got2[0] != "3000:3000" {
+		t.Errorf("getPorts should fall back to modePorts, got %v", got2)
+	}
+}
+
+func TestBuildVolumeArgsMounts(t *testing.T) {
+	cfg := &Config{
+		Volume: VolumeConfig{
+			Enabled:  true,
+			Packages: map[string]bool{},
+			Mounts:   []string{"my-vol:/data", "/host/path:/container/path"},
+		},
+	}
+	args := buildVolumeArgs(cfg)
+	found := false
+	for i, a := range args {
+		if a == "-v" && i+1 < len(args) && args[i+1] == "my-vol:/data" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("buildVolumeArgs should include Mounts, got %v", args)
+	}
+}
+
 func stringSliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
